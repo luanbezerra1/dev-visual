@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 Console.Clear();
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddDbContext<AppDataContext>();
 var app = builder.Build();
 
 //Lista de produtos fakes
@@ -50,13 +51,14 @@ List<Produto> produtos = new List<Produto>
 app.MapGet("/", () => "API de Produtos");
 
 //GET: /api/produto/listar
-app.MapGet("/api/produto/listar", () =>
+app.MapGet("/api/produto/listar", 
+    ([FromServices] AppDataContext ctx) =>
 {
     //Validar a lista de produtos para saber 
     //se existe algo dentro
-    if (produtos.Any())
+    if (ctx.Produtos.Any())
     {
-        return Results.Ok(produtos);
+        return Results.Ok(ctx.Produtos.ToList());
     }
     return Results.NotFound("Lista vazia!");
 });
@@ -76,31 +78,31 @@ app.MapGet("/api/produto/buscar/{nome}", (string nome) =>
 
 //POST: /api/produto/cadastrar
 app.MapPost("/api/produto/cadastrar",
-    ([FromBody] Produto produto) =>
+    ([FromBody] Produto produto , [FromServices] AppDataContext ctx) =>
 {
     //Não permitir o cadastro de um produto
     //com o mesmo nome
-    foreach (Produto produtoCadastrado in produtos)
+  Produto? resultado=
+    ctx.Produtos.FirstOrDefault(x => x.Nome == produto.Nome);
+    if (resultado is not null)
     {
-        if (produtoCadastrado.Nome == produto.Nome)
-        {
-            return Results.Conflict("Produto já cadastrado!");
-        }
+        return Results.Conflict("Esse produto ja existe.");
     }
-    produtos.Add(produto);
+
+
+    ctx.Produtos.Add(produto);
+    ctx.SaveChanges();
     return Results.Created("", produto);
 });
 
 //DELETE: /api/produto/remover/nome_do_produto
-app.MapDelete("/api/produto/remover/{id}", (string id) =>
+app.MapDelete("/api/produto/remover/{id}", ([FromRoute] string id , [FromServices] AppDataContext ctx) =>
 {
     //procurar produto pelo nome
-    var produto = produtos.FirstOrDefault(p => p.Id == id);
-
-    if (produto is null)
+    Produto? resultado = ctx.Produtos.Find(id);
+    if (resultado is not null)
     {
-        //se não achar, 404
-        return Results.NotFound("Produto não encontrado!");
+        return Results.NotFound("Esse produto nao existe.");
     }
 
     //remover da lista
